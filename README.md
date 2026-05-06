@@ -1,5 +1,11 @@
+![Python](https://img.shields.io/badge/Python-3.13-blue)
+![Streamlit](https://img.shields.io/badge/Streamlit-App-red)
+![Status](https://img.shields.io/badge/Status-Active-success)
+![License](https://img.shields.io/badge/License-MIT-green)
+
 # SchemeShield AI - Fraud Detection + Scheme Eligibility Assistant
 
+> A citizen-first protection layer against fake government schemes and fraud messages.
 ## Project overview
 
 SchemeShield AI is a Streamlit civic-tech application that helps citizens detect suspicious government scheme messages and discover schemes that may match their profile. It uses transparent rule-based checks, local CSV data, and a clean citizen-facing interface.
