@@ -25,6 +25,9 @@ Fake WhatsApp, SMS, and social media messages often use government names, money 
 - Manual recommendations when no exact scheme is found.
 - Impact Dashboard with total schemes, eligible match count, latest fraud score, and latest risk category.
 - Sample inputs for repeatable testing.
+- ## 📸 App Preview
+
+![App Screenshot](screenshot.png)
 
 ## Improved fraud detection logic
 
