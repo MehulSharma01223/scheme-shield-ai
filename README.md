@@ -2,7 +2,7 @@
 
 ## Project overview
 
-SchemeShield AI is a Streamlit civic-tech application that helps citizens detect suspicious government scheme messages and discover schemes that may match their profile. It uses transparent rule-based checks, local CSV data, and a clean citizen-facing interface.
+SchemeShield AI is a Streamlit civic-tech application that helps citizens detect suspicious government scheme messages and discover schemes that may match their profile. It uses hybrid rule-based + ML fraud detection, local CSV data, and a clean citizen-facing interface.
 
 ## Problem statement
 
@@ -10,17 +10,33 @@ Fake WhatsApp, SMS, and social media messages often use government names, money 
 
 ## Features
 
-- Fraud Detector with 0-100 risk score.
+- Fraud Detector with hybrid 0-100 risk score.
 - Categories: Likely Real, Suspicious, and Likely Fake.
 - Strong fraud rules for OTP, Aadhaar, bank details, fees, UPI, QR, and short links.
 - Combo boosts for high-confidence fraud patterns.
+- Lightweight ML prediction using TF-IDF vectorization and Logistic Regression.
+- Explainable output with rule score, ML score, ML prediction, confidence, and hybrid final score.
+- Rule-based fallback if the ML model, dataset, or dependency is unavailable.
 - Scheme Eligibility checker using state, age, income, user type, category, and location.
 - Match explanations for every eligible scheme.
 - Manual recommendations when no exact scheme is found.
 - Impact Dashboard with total schemes, eligible match count, latest fraud score, and latest risk category.
 - Sample inputs for repeatable testing.
 
-## Improved fraud detection logic
+## Hybrid fraud detection logic
+
+SchemeShield AI combines two layers:
+
+1. Rule-based detector: transparent keyword and combo checks for high-risk fraud signals.
+2. ML detector: TF-IDF vectorization with Logistic Regression trained on a local demo dataset of fake and real scheme-style messages.
+
+Hybrid score:
+
+```text
+final_score = 0.65 * rule_score + 0.35 * ml_score
+```
+
+If ML training or prediction fails, the app automatically falls back to the rule-based score without crashing.
 
 Critical risk signals add 25 points each:
 
@@ -50,11 +66,20 @@ Final score is capped at 100:
 - 31-60 = Suspicious.
 - 61-100 = Likely Fake.
 
+The result screen also shows:
+
+- Rule-based score.
+- ML score.
+- ML prediction: fake or real.
+- Confidence.
+- Hybrid final score.
+
 ## Tech stack
 
 - Python
 - Streamlit
 - Pandas
+- scikit-learn
 
 ## Folder structure
 
@@ -64,9 +89,11 @@ scheme-shield-ai/
 |-- requirements.txt
 |-- README.md
 |-- data/
-|   `-- schemes.csv
+|   |-- schemes.csv
+|   `-- fraud_messages.csv
 `-- utils/
     |-- fraud_detector.py
+    |-- ml_fraud_model.py
     `-- eligibility.py
 ```
 
@@ -116,13 +143,16 @@ Expected result: matching scheme cards with clear eligibility reasons.
 
 - `requirements.txt` app ke packages batata hai: Streamlit UI ke liye aur Pandas CSV read karne ke liye.
 - `data/schemes.csv` ek local mini database hai. Isme schemes aur eligibility rules rows ke form me stored hain.
-- `utils/fraud_detector.py` message me risky words aur combinations check karta hai. Jaise OTP + government scheme ya money promise + processing fee.
+- `utils/fraud_detector.py` message me risky words, combinations, aur ML score ko combine karta hai. Jaise OTP + government scheme ya money promise + processing fee.
+- `utils/ml_fraud_model.py` local demo dataset se TF-IDF + Logistic Regression model train karta hai. Agar ML fail ho jaye, app rule-based fallback use karta hai.
 - `utils/eligibility.py` user details ko CSV rules se compare karta hai aur match reasons bhi banata hai.
 - `app.py` frontend hai. Ye forms, buttons, cards, dashboard metrics, sample inputs, aur result sections ko connect karta hai.
 
 ## Known limitations
 
-This is a rule-based MVP, not an official government verification system.
+This ML model is trained on a demo dataset and is not an official fraud verification system.
+
+Scheme and fraud results are educational decision-support outputs, not live government verification.
 
 ## Future scope
 
