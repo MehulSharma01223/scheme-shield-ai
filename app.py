@@ -157,14 +157,38 @@ def apply_custom_css():
             }
         }
 
-        [data-testid="stHeader"],
-        [data-testid="stToolbar"],
         [data-testid="stDecoration"],
         #MainMenu,
         footer {
             display: none !important;
             visibility: hidden !important;
             height: 0 !important;
+        }
+
+        /* Keep Streamlit header available so the native sidebar expand button works. */
+        [data-testid="stHeader"] {
+            display: block !important;
+            visibility: visible !important;
+            background: transparent !important;
+        }
+
+        /* Do not force-hide the toolbar/header area; sidebar controls depend on it. */
+        [data-testid="stToolbar"] {
+            background: transparent !important;
+        }
+
+        [data-testid="stSidebarCollapseButton"],
+        [data-testid="stSidebarCollapsedControl"],
+        [data-testid="collapsedControl"] {
+            display: flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            pointer-events: auto !important;
+            z-index: 999999 !important;
+        }
+
+        [data-testid="stSidebar"] {
+            pointer-events: auto !important;
         }
 
         .stApp {
@@ -545,6 +569,7 @@ def initialize_session_state():
         "sample_fraud_loaded": False,
         "sample_eligibility_loaded": False,
         "pending_sample_target": "",
+        "pending_active_page": "",
     }
     default_values.update(AUTO_FILL_WIDGET_DEFAULTS)
 
@@ -654,8 +679,16 @@ def render_sample_loaded_feedback():
 def rerun_after_sample_load(message, target_page):
     """Refresh the UI once after a sample button click."""
     st.session_state["sample_loaded_message"] = message
-    st.session_state["active_page"] = target_page
+    st.session_state["pending_active_page"] = target_page
     st.rerun()
+
+
+def apply_pending_navigation():
+    """Apply queued page changes before the sidebar widget is rendered."""
+    pending_page = st.session_state.get("pending_active_page")
+    if pending_page in PAGE_OPTIONS:
+        st.session_state["active_page"] = pending_page
+    st.session_state["pending_active_page"] = ""
 
 
 def render_sidebar():
@@ -782,6 +815,22 @@ def render_fraud_result(result):
             st.write("Risk level")
             st.progress(risk_score / 100)
 
+        st.markdown("**Hybrid analysis**")
+        hybrid_columns = st.columns(5)
+        with hybrid_columns[0]:
+            st.metric("Rule Score", f"{result.get('rule_score', risk_score)}/100")
+        with hybrid_columns[1]:
+            st.metric("ML Score", f"{result.get('ml_score', 0)}/100")
+        with hybrid_columns[2]:
+            st.metric("ML Prediction", str(result.get("ml_label", "real")).title())
+        with hybrid_columns[3]:
+            st.metric("Confidence", f"{result.get('confidence', 0)}%")
+        with hybrid_columns[4]:
+            st.metric("Hybrid Final", f"{risk_score}/100")
+
+        if not result.get("model_available", False):
+            st.caption("ML model unavailable; showing rule-based fallback result.")
+
         if result_category == "Likely Fake":
             st.markdown(
                 """
@@ -828,10 +877,8 @@ def render_fraud_sample_section():
     """Render a sample helper for the fraud detector page."""
     with st.expander("Try a sample risky message"):
         st.write(SAMPLE_FAKE_MESSAGE)
-        st.button(
-            "Use this message",
-            on_click=load_sample_fraud_message_from_dashboard,
-        )
+        if st.button("Use this message"):
+            load_sample_fraud_message_from_dashboard()
 
 
 def render_fraud_detector_page():
@@ -929,10 +976,8 @@ def render_eligibility_sample_section():
             "Name: Riya | State: Rajasthan | Age: 20 | Annual income: 180000 | "
             "User type: Student | Category: SC | Location: Rural"
         )
-        st.button(
-            "Load sample profile",
-            on_click=load_sample_eligibility_profile_from_dashboard,
-        )
+        if st.button("Load sample profile"):
+            load_sample_eligibility_profile_from_dashboard()
 
 
 def render_eligibility_checker_page():
@@ -1063,17 +1108,17 @@ def render_testing_inputs_section():
 
         button_columns = st.columns(2)
         with button_columns[0]:
-            st.button(
+            if st.button(
                 "Use Sample Fraud Message",
-                on_click=load_sample_fraud_message_from_dashboard,
                 use_container_width=True,
-            )
+            ):
+                load_sample_fraud_message_from_dashboard()
         with button_columns[1]:
-            st.button(
+            if st.button(
                 "Use Sample Eligibility Data",
-                on_click=load_sample_eligibility_profile_from_dashboard,
                 use_container_width=True,
-            )
+            ):
+                load_sample_eligibility_profile_from_dashboard()
 
         render_sample_loaded_feedback()
 
@@ -1124,6 +1169,7 @@ def main():
     st.set_page_config(
         page_title="SchemeShield AI",
         layout="wide",
+        initial_sidebar_state="expanded",
     )
 
     apply_custom_css()
@@ -1131,6 +1177,7 @@ def main():
     restore_loaded_sample_values()
     preserve_widget_state_across_pages()
     ensure_selectbox_values_are_valid()
+    apply_pending_navigation()
     schemes_df = load_schemes()
     total_schemes = len(schemes_df)
     selected_page = render_sidebar()
