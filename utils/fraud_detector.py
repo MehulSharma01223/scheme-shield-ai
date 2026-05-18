@@ -2,6 +2,11 @@
 
 import re
 
+try:
+    from utils.ml_fraud_model import predict_fraud_probability
+except Exception:
+    predict_fraud_probability = None
+
 
 # Critical signals are high-risk because they can directly cause financial loss
 # or identity theft. Each matched signal adds 25 points.
@@ -115,6 +120,7 @@ GOVERNMENT_REFERENCE_KEYWORDS = [
     "modi",
     "yojana",
     "scheme",
+    "subsidy",
 ]
 
 
@@ -148,6 +154,46 @@ def _score_to_category(score):
     return "Likely Fake"
 
 
+def _fallback_ml_prediction(error_message="ML model unavailable."):
+    """Return safe ML fallback values without affecting rule-based detection."""
+    return {
+        "ml_score": 0,
+        "ml_label": "real",
+        "confidence": 0,
+        "model_available": False,
+        "error": error_message,
+    }
+
+
+def _safe_ml_prediction(message):
+    """Run the ML predictor and normalize its output for hybrid scoring."""
+    if predict_fraud_probability is None:
+        return _fallback_ml_prediction("ML module could not be imported.")
+
+    try:
+        prediction = predict_fraud_probability(message)
+    except Exception as error:
+        return _fallback_ml_prediction(str(error))
+
+    try:
+        ml_score = int(round(float(prediction.get("ml_score", 0))))
+        confidence = int(round(float(prediction.get("confidence", 0))))
+    except (TypeError, ValueError):
+        return _fallback_ml_prediction("ML prediction returned invalid numbers.")
+
+    ml_label = str(prediction.get("ml_label", "real")).strip().lower()
+    if ml_label not in {"fake", "real"}:
+        ml_label = "real"
+
+    return {
+        "ml_score": max(0, min(ml_score, 100)),
+        "ml_label": ml_label,
+        "confidence": max(0, min(confidence, 100)),
+        "model_available": bool(prediction.get("model_available", True)),
+        "error": prediction.get("error", ""),
+    }
+
+
 def _add_signal_match(signal, score_value, message_text, reasons, matched_keywords):
     """Add score and explanations when a signal's keywords are detected."""
     matches = _keyword_matches(message_text, signal["keywords"])
@@ -164,9 +210,15 @@ def _add_signal_match(signal, score_value, message_text, reasons, matched_keywor
 def analyze_scheme_message(message):
     """Analyze a scheme message and return score, category, reasons, and matches."""
     if not message or not message.strip():
+        ml_prediction = _safe_ml_prediction(message)
         empty_result = {
             "score": 0,
             "category": "Likely Real",
+            "rule_score": 0,
+            "ml_score": ml_prediction["ml_score"],
+            "ml_label": ml_prediction["ml_label"],
+            "confidence": ml_prediction["confidence"],
+            "model_available": ml_prediction["model_available"],
             "reasons": ["No message entered, so no fraud signals were detected."],
             "matched_keywords": [],
         }
@@ -253,7 +305,22 @@ def analyze_scheme_message(message):
         reasons.append("Combo risk: unknown link plus urgency language.")
         matched_keywords.append("short link + urgency")
 
-    final_score = min(total_score, 100)
+    rule_score = min(total_score, 100)
+    ml_prediction = _safe_ml_prediction(message)
+    ml_score = ml_prediction["ml_score"]
+
+    if ml_prediction["model_available"]:
+        final_score = round((0.65 * rule_score) + (0.35 * ml_score))
+        reasons.append(
+            "Hybrid check: rule-based score and ML probability were combined."
+        )
+    else:
+        final_score = rule_score
+        reasons.append(
+            "ML model was unavailable, so the app used rule-based detection only."
+        )
+
+    final_score = max(0, min(int(final_score), 100))
     category = _score_to_category(final_score)
 
     if not reasons:
@@ -262,6 +329,11 @@ def analyze_scheme_message(message):
     result = {
         "score": int(final_score),
         "category": category,
+        "rule_score": int(rule_score),
+        "ml_score": int(ml_score),
+        "ml_label": ml_prediction["ml_label"],
+        "confidence": int(ml_prediction["confidence"]),
+        "model_available": ml_prediction["model_available"],
         "reasons": reasons,
         "matched_keywords": sorted(set(matched_keywords)),
     }
